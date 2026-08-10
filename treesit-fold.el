@@ -455,17 +455,25 @@ This function is borrowed from `tree-sitter-node-at-point'."
     (let* ((beg (car range))
            (end (cdr range))
            (ov (make-overlay beg end))
-           (map (make-sparse-keymap)))
+           (map (make-sparse-keymap))
+           (indent (save-excursion
+                     (goto-char beg)
+                     (forward-line 1)
+                     (current-indentation))))
       (define-key map (kbd "<mouse-1>") #'treesit-fold-open)
       (overlay-put ov 'creator 'treesit-fold)
       (overlay-put ov 'priority treesit-fold-priority)
       (overlay-put ov 'invisible 'treesit-fold)
       (overlay-put ov 'display
-                   (propertize (treesit-fold--format-overlay-text beg end)
-                               'mouse-face 'treesit-fold-replacement-mouse-face
-                               'help-echo "mouse-1: unfold this node"
-                               'keymap map))
-      (overlay-put ov 'face 'treesit-fold-replacement-face)
+                   (concat "\n"
+                           (make-string indent ?\s)
+                           (propertize (treesit-fold--format-overlay-text beg end)
+                                       'mouse-face 'treesit-fold-replacement-mouse-face
+                                       'help-echo "mouse-1: unfold this node"
+                                       'keymap map
+                                       'face 'treesit-fold-replacement-face)))
+      ;; Remove the separate face put — it is now inside the propertized string
+      ;; (overlay-put ov 'face 'treesit-fold-replacement-face)
       (overlay-put ov 'modification-hooks '(treesit-fold--on-change))
       (overlay-put ov 'insert-in-front-hooks '(treesit-fold--on-change))
       (overlay-put ov 'isearch-open-invisible #'treesit-fold--on-change)
@@ -760,7 +768,8 @@ Argument PREFIX is the comment prefix in string."
                 (last-node (ignore-errors
                              (treesit-fold--continuous-node-prefix node prefix t)))
                 (prefix-len (length prefix))
-                (beg (+ (treesit-node-start first-node) prefix-len))
+                ;;(beg (+ (treesit-node-start first-node) prefix-len))
+                (beg (treesit-node-end first-node))
                 (end (treesit-node-end last-node)))
       (treesit-fold--cons-add (cons beg end) offset))))
 
