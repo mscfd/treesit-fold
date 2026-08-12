@@ -40,6 +40,7 @@
 (require 'mule-util)
 (require 'seq)
 (require 'subr-x)
+(require 'cl-lib)
 
 (require 'treesit)
 
@@ -599,6 +600,49 @@ If the current node is not folded or not foldable, do nothing."
       (mapc #'delete-overlay nodes)
       (run-hooks 'treesit-fold-on-fold-hook)
       t)))
+
+(require 'cl-lib) ; for cl-loop, usually already loaded
+
+(defun treesit-fold--fn-thing (fold-fn thing)
+  "Apply FOLD-FN to every node matching THING in the current buffer.
+THING must be a symbol defined in `treesit-thing-settings' for the
+buffer's language (like `defun').
+This is intended to be used with `treesit-fold-open', `treesit-fold-close'
+or `treesit-fold-toggle'."
+  ;; TODO: what about multi-language buffers, which language to we query?
+  (unless (treesit-thing-defined-p thing (treesit-language-at (point)))
+    (user-error "Thing `%s' is not defined for %s" thing major-mode))
+  (save-excursion
+    (goto-char (point-min))
+    (cl-loop
+     for node = (treesit-thing-next (point) thing)
+     while node
+     do (goto-char (treesit-node-start node))
+     do (ignore-errors (funcall fold-fn))
+     do (goto-char (treesit-node-end node)))))
+
+(defun treesit-fold--read-thing ()
+  "Read a thing name with completion when called with a prefix arg.
+Returns nil otherwise, so the caller can fall back to its own default."
+  (when current-prefix-arg
+    (intern (completing-read "Thing: "
+                              (mapcar #'car (alist-get (treesit-language-at (point))
+                                                        treesit-thing-settings))))))
+
+(defun treesit-fold-open-thing (&optional thing)
+  "Unfold every foldable THING (default `defun') in the current buffer."
+  (interactive (list (treesit-fold--read-thing)))
+  (treesit-fold--fn-thing #'treesit-fold-open (or thing 'defun)))
+
+(defun treesit-fold-close-thing (&optional thing)
+  "Fold every foldable THING (default `defun') in the current buffer."
+  (interactive (list (treesit-fold--read-thing)))
+  (treesit-fold--fn-thing #'treesit-fold-close (or thing 'defun)))
+
+(defun treesit-fold-toggle-thing (&optional thing)
+  "Toggle every foldable THING (default `defun') in the current buffer."
+  (interactive (list (treesit-fold--read-thing)))
+  (treesit-fold--fn-thing #'treesit-fold-toggle (or thing 'defun)))
 
 ;;;###autoload
 (defun treesit-fold-toggle ()

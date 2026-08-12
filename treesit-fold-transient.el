@@ -15,6 +15,7 @@
 ;;   (transient-replace-suffix 'treesit-fold-menu "t"
 ;;     '("A-<down>" "Toggle node at point" treesit-fold-toggle)))
 
+(require 'cl-lib)
 (require 'transient)
 
 (defun treesit-fold-menu--mode-indicator (mode)
@@ -22,6 +23,46 @@
   (if (and (boundp mode) (symbol-value mode))
       (propertize "on"  'face 'transient-value)
     (propertize "off" 'face 'transient-inactive-value)))
+
+(defun treesit-fold--thing-suffixes (prefix-sym fold-fn)
+  "Build numbered transient suffixes, one per available thing.
+PREFIX-SYM is the prefix these suffixes belong to (required by
+`transient-parse-suffixes').  Selecting a suffix applies FOLD-FN to
+that thing via `treesit-fold--fn-thing'."
+  (let ((things (mapcar #'car
+                        (alist-get (treesit-language-at (point))
+                                   treesit-thing-settings)))
+        (key 0))
+    (transient-parse-suffixes
+     prefix-sym
+     (mapcar (lambda (thing)
+               (list (number-to-string (cl-incf key))
+                     (symbol-name thing)
+                     (lambda ()
+                       (interactive)
+                       (treesit-fold--fn-thing fold-fn thing))))
+             things))))
+
+(defmacro treesit-fold--define-thing-select-menu (name fold-fn doc)
+  "Define transient prefix NAME listing available things as 1, 2, 3…
+Selecting one applies FOLD-FN to every occurrence of that thing."
+  `(transient-define-prefix ,name ()
+     ,doc
+     [:class transient-column
+      :setup-children
+      (lambda (_) (treesit-fold--thing-suffixes ',name #',fold-fn))]))
+
+(treesit-fold--define-thing-select-menu
+ treesit-fold-close-thing-menu treesit-fold-close
+ "Pick a thing, close every occurrence of it in the buffer.")
+
+(treesit-fold--define-thing-select-menu
+ treesit-fold-open-thing-menu treesit-fold-open
+ "Pick a thing, open every occurrence of it in the buffer.")
+
+(treesit-fold--define-thing-select-menu
+ treesit-fold-toggle-thing-menu treesit-fold-toggle
+ "Pick a thing, toggle every occurrence of it in the buffer.")
 
 (transient-define-prefix treesit-fold-menu ()
   "Transient menu for treesit-fold."
@@ -40,6 +81,11 @@
    ""
    ("C" "Close all in buffer"    treesit-fold-close-all)
    ("O" "Open all in buffer"     treesit-fold-open-all)]
+
+  ["Fold / Unfold by Thing"
+   ("dc" "Close by thing…"  treesit-fold-close-thing-menu)
+   ("do" "Open by thing…"   treesit-fold-open-thing-menu)
+   ("dt" "Toggle by thing…" treesit-fold-toggle-thing-menu)]
 
   ["Toggle modes"
    ("m" treesit-fold-menu--toggle-mode
